@@ -1,5 +1,4 @@
 #include <iostream>
-#include <vector>
 #include <bitset>
 using namespace std;
 
@@ -7,13 +6,11 @@ using namespace std;
 class IF
 {
 public:
-    IF(bitset<32> PC)
-        : PC(PC)
+    IF()
     {
         implement = 1; // implement初始化為1，必定皆會從抓取指令開始
     }
 
-protected:
     //* Program counter
     bitset<32> PC;
 

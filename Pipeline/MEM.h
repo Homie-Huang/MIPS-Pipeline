@@ -1,5 +1,4 @@
 #include <iostream>
-#include <vector>
 #include <bitset>
 using namespace std;
 
@@ -7,8 +6,7 @@ using namespace std;
 class MEM
 {
 public:
-    MEM(bitset<5> rs, bitset<5> rt, bitset<5> Write_reg, bitset<32> ALU_result, bitset<32> Write_data)
-        : rs(rs), rt(rt), Write_reg(Write_reg), ALU_result(ALU_result), Write_data(Write_data)
+    MEM()
     {
         Branch = 0;
         MemRead = 0;
@@ -18,11 +16,10 @@ public:
         implement = 0; // implement初始化為0
     }
 
-protected:
     //* Instruction Field
     bitset<5> rs;
     bitset<5> rt;
-    bitset<5> Write_reg;  // R-type: rd，I-type: rt
+    bitset<5> Write_reg; // R-type: rd，I-type: rt
 
     //* Data Memory input
     bitset<32> ALU_result;

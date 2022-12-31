@@ -1,5 +1,4 @@
 #include <iostream>
-#include <vector>
 #include <bitset>
 using namespace std;
 
@@ -7,8 +6,7 @@ using namespace std;
 class EX
 {
 public:
-    EX(bitset<5> rs, bitset<5> rt, bitset<5> Write_reg, bitset<16> I_address, bitset<32> Read_data1, bitset<32> Read_data2)
-        : rs(rs), rt(rt), Write_reg(Write_reg), I_address(I_address), Read_data1(Read_data1), Read_data2(Read_data2)
+    EX()
     {
         ALUOp = 0;
         type = 0;
@@ -22,7 +20,6 @@ public:
         implement = 0; // implement初始化為0
     }
 
-protected:
     //* Instruction Field
     bitset<5> rs;
     bitset<5> rt;

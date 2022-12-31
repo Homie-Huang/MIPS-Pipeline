@@ -1,5 +1,4 @@
 #include <iostream>
-#include <vector>
 #include <bitset>
 using namespace std;
 
@@ -7,13 +6,11 @@ using namespace std;
 class ID
 {
 public:
-    ID(bitset<32> INS)
-        : INS(INS)
+    ID()
     {
         implement = 0; // implement初始化為0
     }
 
-protected:
     //* instruction
     bitset<32> INS;
 
