@@ -2,7 +2,6 @@
 #include <bitset>
 using namespace std;
 
-//! Instruction fetch from memory
 class IF
 {
 public:

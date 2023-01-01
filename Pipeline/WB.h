@@ -2,7 +2,6 @@
 #include <bitset>
 using namespace std;
 
-//! Write result back to register
 class WB
 {
 public:

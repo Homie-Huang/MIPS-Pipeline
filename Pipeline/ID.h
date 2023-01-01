@@ -2,7 +2,6 @@
 #include <bitset>
 using namespace std;
 
-//! Instruction decode & register read
 class ID
 {
 public:

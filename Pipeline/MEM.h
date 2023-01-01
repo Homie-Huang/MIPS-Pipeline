@@ -2,7 +2,7 @@
 #include <bitset>
 using namespace std;
 
-//! Access memory operand
+
 class MEM
 {
 public:

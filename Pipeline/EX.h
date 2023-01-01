@@ -2,7 +2,6 @@
 #include <bitset>
 using namespace std;
 
-//! Execute operation or calculate address
 class EX
 {
 public:
