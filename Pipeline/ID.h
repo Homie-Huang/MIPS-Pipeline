@@ -12,7 +12,7 @@ public:
     }
 
     //* instruction
-    bitset<32> INS;
+    bitset<32> ins;
 
     //* 在當前clock cycle，此stage是否在執行
     bool implement;
