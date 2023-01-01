@@ -8,7 +8,7 @@ public:
     WB()
     {
         RegWrite = 0;
-        MemtoReg = 0;
+        MemtoReg = '0';
         implement = 0; // implement初始化為0
     }
 
@@ -22,7 +22,7 @@ public:
 
     //* Control Sign
     bool RegWrite;
-    bool MemtoReg;
+    char MemtoReg;
 
     //* 在當前clock cycle，此stage是否在執行
     bool implement;

@@ -12,7 +12,7 @@ public:
         MemRead = 0;
         MemWrite = 0;
         RegWrite = 0;
-        MemtoReg = 0;
+        MemtoReg = '0';
         implement = 0; // implement初始化為0
     }
 
@@ -30,7 +30,7 @@ public:
     bool MemRead;
     bool MemWrite;
     bool RegWrite;
-    bool MemtoReg;
+    char MemtoReg;
 
     //* 在當前clock cycle，此stage是否在執行
     bool implement;
