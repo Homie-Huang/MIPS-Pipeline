@@ -7,7 +7,7 @@
 class State
 {
 public:
-    State();
+    State(){};
     
     IF IF_stage;
     ID ID_stage;

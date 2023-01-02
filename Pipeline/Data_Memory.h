@@ -18,10 +18,18 @@ public:
         data_mem.resize(mem_size, bitset<8>(0)); // 將容器(data_mem)大小，使其大小調整為mem_size，並先將全部初始化為0
 
         //* 每個word(4bytes)初始化為1
-        for (int i = 3; i < mem_size; i += 4)
+        /*for (int i = 3; i < mem_size; i += 4)
         {
             data_mem[i] = bitset<8>(1);
-        }
+        }*/
+        data_mem[0] = bitset<8>("11111111");
+        data_mem[1] = bitset<8>("11111111");
+        data_mem[2] = bitset<8>("11111111");
+        data_mem[3] = bitset<8>("11111111");
+        data_mem[4] = bitset<8>("01111111");
+        data_mem[5] = bitset<8>("11111111");
+        data_mem[6] = bitset<8>("11111111");
+        data_mem[7] = bitset<8>("11111110");
     }
 
     //* 根據input: address抓取[address ~ address+3]的data_mem中的bits，組合成一個完整32bits的data
@@ -44,7 +52,7 @@ public:
     {
         for (int k = 0; k < 4; k++)
         {
-            data_mem[k] = bitset<8>(write_data.to_string().substr(k * 8, 8));
+            data_mem[address.to_ulong() + k] = bitset<8>(write_data.to_string().substr(k * 8, 8));
         }
     }
 
@@ -56,7 +64,7 @@ public:
         for (int i = 0; i < words; i++)
         {
             string result;
-            for (int j = 0; i < 4; i++)
+            for (int j = 0; j < 4; j++)
             {
                 result.append(data_mem[i * 4 + j].to_string());
             }

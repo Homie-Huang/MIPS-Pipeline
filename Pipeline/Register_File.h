@@ -17,10 +17,12 @@ public:
         reg[0] = bitset<32>(0);
 
         //* 其他暫存器的初始值為1
+        /*
         for (int i = 1; i < reg_num; i++)
         {
             reg[i] = bitset<32>(1);
         }
+        */
     }
 
     //* 根據 read_register: rs、rt 的code解碼(轉十進位)後，讀取該暫存器data

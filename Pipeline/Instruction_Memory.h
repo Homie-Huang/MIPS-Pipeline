@@ -18,7 +18,7 @@ public:
         ins_mem.resize(mem_size); // 將容器(ins_mem)大小，使其大小調整為mem_size
 
         //* 讀取input.txt
-        ifstream file("input.txt");
+        ifstream file("E:/Computer_Organization/Project/Pipeline/input.txt");
         string line;
         int i = 0;
         while (getline(file, line))
