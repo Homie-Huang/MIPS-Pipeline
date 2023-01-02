@@ -73,7 +73,7 @@ unsigned long shift_bits(bitset<32> ins, int start)
     return ((ins.to_ulong()) >> start);
 }
 
-bitset<32> Sign_extend(bitset<16> i_address)
+bitset<32> sign_extend(bitset<16> i_address)
 {
     string extended_address;
     //* 若最大位數為0，則extend 16個0
@@ -221,7 +221,6 @@ int main()
             next_state.EX_stage.Branch = (opcode.to_ulong() == 4) ? 1 : 0;
             next_state.EX_stage.MemRead = (opcode.to_ulong() == 35) ? 1 : 0;
             next_state.EX_stage.MemWrite = (opcode.to_ulong() == 43) ? 1 : 0;
-            //? newState.EX.wrt_enable = (IsStore.to_ulong() || IsBranch.to_ulong() || JType.to_ulong()) ? 0 : 1;
 
             next_state.EX_stage.implement = current_state.ID_stage.implement;
 
@@ -253,7 +252,7 @@ int main()
                 }
             }
 
-            //TODO
+            // TODO
             //* Branch Hazard
             //* beq的opcode[31~26]為000100->4，且當rs=rt時[Register comparator在ID Stage]，執行beq指令
             if (opcode.to_ulong() == 4)
@@ -271,6 +270,70 @@ int main()
         }
 
         //! EX Stage: Execute operation or calculate address
+        //* EX Stage執行時
+        if (current_state.EX_stage.implement)
+        {
+            //* EX hazard
+            //* 1.確認是否已有執行至MEM_stage 2.判斷前指令必須是會更新暫存器的 3.寫入的暫存器必須非$0 4.write_reg(R-type: rd，Lw: rt) = rs / rt 時發生
+            bool EX_condition = (current_state.MEM_stage.RegWrite && current_state.MEM_stage.Write_reg.to_ulong() != 0);
+            if (current_state.MEM_stage.implement && EX_condition && current_state.MEM_stage.Write_reg == current_state.EX_stage.rs)
+            {
+                current_state.EX_stage.Read_data1 = current_state.MEM_stage.ALU_result;
+            }
+            if (current_state.MEM_stage.implement && EX_condition && current_state.MEM_stage.Write_reg == current_state.EX_stage.rt)
+            {
+                current_state.EX_stage.Read_data2 = current_state.MEM_stage.ALU_result;
+            }
+
+            //* MEM hazard
+            //* 1.確認是否已有執行至WB_stage 2.判斷前前指令必須是會更新暫存器的 3.寫入的暫存器必須非$0 4.在EX_hazard不成立的情況，也就是前指令無法給資料 5.write_reg(R-type: rd，Lw: rt) = rs / rt 時發生
+            bool MEM_condition = (current_state.WB_stage.RegWrite && current_state.WB_stage.Write_reg.to_ulong() != 0);
+            if (current_state.WB_stage.implement && MEM_condition && !(EX_condition && current_state.MEM_stage.Write_reg == current_state.EX_stage.rs) && current_state.WB_stage.Write_reg == current_state.EX_stage.rs)
+            {
+                current_state.EX_stage.Read_data1 = current_state.WB_stage.Write_data;
+            }
+            if (current_state.WB_stage.implement && MEM_condition && !(EX_condition && current_state.MEM_stage.Write_reg == current_state.EX_stage.rt) && current_state.WB_stage.Write_reg == current_state.EX_stage.rt)
+            {
+                current_state.EX_stage.Read_data2 = current_state.WB_stage.Write_data;
+            }
+
+            //* 依指令更新ALU_result[RegWrtie: 0=sw、beq，1=R-type、lw]
+            if (!current_state.EX_stage.ALUSrc && !current_state.EX_stage.type && current_state.EX_stage.ALUOp) // add
+            {
+                next_state.MEM_stage.ALU_result = bitset<32>(current_state.EX_stage.Read_data1.to_ulong() + current_state.EX_stage.Read_data2.to_ulong());
+            }
+            else if (!current_state.EX_stage.ALUSrc && !current_state.EX_stage.type && !current_state.EX_stage.ALUOp) // sub
+            {
+                next_state.MEM_stage.ALU_result = bitset<32>(current_state.EX_stage.Read_data1.to_ulong() - current_state.EX_stage.Read_data2.to_ulong());
+            }
+            else if (current_state.EX_stage.ALUSrc && current_state.EX_stage.type && current_state.EX_stage.ALUOp) // lw、sw
+            {
+                next_state.MEM_stage.ALU_result = bitset<32>(current_state.EX_stage.Read_data1.to_ulong() + sign_extend(current_state.EX_stage.I_address).to_ulong());
+            }
+            else // beq
+            {
+                next_state.MEM_stage.ALU_result = bitset<32>(0);
+            }
+
+            //* 更新所有資訊
+            next_state.MEM_stage.rs = current_state.EX_stage.rs;
+            next_state.MEM_stage.rt = current_state.EX_stage.rt;
+            next_state.MEM_stage.Write_reg = current_state.EX_stage.Write_reg;
+
+            next_state.MEM_stage.Write_data = current_state.EX_stage.Read_data2;
+
+            next_state.MEM_stage.Branch = current_state.EX_stage.Branch;
+            next_state.MEM_stage.MemRead = current_state.EX_stage.MemRead;
+            next_state.MEM_stage.MemWrite = current_state.EX_stage.MemWrite;
+            next_state.MEM_stage.RegWrite = current_state.EX_stage.RegWrite;
+            next_state.MEM_stage.MemtoReg = current_state.MEM_stage.MemtoReg;
+
+            next_state.MEM_stage.implement = current_state.EX_stage.implement;
+        }
+        else
+        {
+            next_state.MEM_stage.implement = current_state.EX_stage.implement;
+        }
 
         //! MEM Stage: Access memory operand
 
