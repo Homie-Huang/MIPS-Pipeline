@@ -164,6 +164,7 @@ public:
         }
         file.close();
     }
+    
 
     //* 根據PC抓取[PC ~ PC+3]的ins_mem中的bits，組合成一個完整32bits的instruction
     bitset<32> read(bitset<32> PC)
