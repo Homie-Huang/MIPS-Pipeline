@@ -11,18 +11,17 @@ class Register_File
 public:
     Register_File()
     {
-        reg.resize(reg_num); // 將容器(reg)大小，使其大小調整為reg_num
+        //* 將容器(reg)大小，使其大小調整為reg_num
+        reg.resize(reg_num); 
 
         //* $0暫存器的初始值為0
         reg[0] = bitset<32>(0);
 
         //* 其他暫存器的初始值為1
-        /*
         for (int i = 1; i < reg_num; i++)
         {
             reg[i] = bitset<32>(1);
         }
-        */
     }
 
     //* 根據 read_register: rs、rt 的code解碼(轉十進位)後，讀取該暫存器data
@@ -41,7 +40,7 @@ public:
     //* 輸出register的state
     void save_file()
     {
-        ofstream file("register_result.txt", ios_base::out | ios_base::app);
+        ofstream file("E:/Computer_Organization/Project/Pipeline/Example1/register_result.txt", ios_base::out | ios_base::app);
         for (int i = 0; i < reg_num; i++)
         {
             file << i << ": " << reg[i] << endl;

@@ -15,21 +15,14 @@ class Data_Memory
 public:
     Data_Memory()
     {
-        data_mem.resize(mem_size, bitset<8>(0)); // 將容器(data_mem)大小，使其大小調整為mem_size，並先將全部初始化為0
+        //* 將容器(data_mem)大小，使其大小調整為mem_size，並先將全部初始化為0
+        data_mem.resize(mem_size, bitset<8>(0)); 
 
         //* 每個word(4bytes)初始化為1
-        /*for (int i = 3; i < mem_size; i += 4)
+        for (int i = 3; i < mem_size; i += 4)
         {
             data_mem[i] = bitset<8>(1);
-        }*/
-        data_mem[0] = bitset<8>("11111111");
-        data_mem[1] = bitset<8>("11111111");
-        data_mem[2] = bitset<8>("11111111");
-        data_mem[3] = bitset<8>("11111111");
-        data_mem[4] = bitset<8>("01111111");
-        data_mem[5] = bitset<8>("11111111");
-        data_mem[6] = bitset<8>("11111111");
-        data_mem[7] = bitset<8>("11111110");
+        }
     }
 
     //* 根據input: address抓取[address ~ address+3]的data_mem中的bits，組合成一個完整32bits的data
@@ -59,7 +52,7 @@ public:
     //* 輸出memory的state(word為單位)
     void save_file()
     {
-        ofstream file("memory_result.txt", ios_base::out | ios_base::app);
+        ofstream file("E:/Computer_Organization/Project/Pipeline/Example1/memory_result.txt", ios_base::out | ios_base::app);
         int words = mem_size / 4;
         for (int i = 0; i < words; i++)
         {

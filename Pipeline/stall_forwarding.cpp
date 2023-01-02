@@ -13,7 +13,7 @@ using namespace std;
 
 void save_state(int cycle, State state)
 {
-    ofstream file("ouput.txt", ios_base::out | ios_base::app);
+    ofstream file("E:/Computer_Organization/Project/Pipeline/Example1/ouput.txt", ios_base::out | ios_base::app);
 
     file << "Cycle " << cycle << endl;
 
@@ -98,7 +98,7 @@ int main()
     State current_state;
     State next_state;
 
-    int cycle = 0;
+    int cycle = 1;
 
     while (true)
     {
@@ -110,10 +110,53 @@ int main()
             bitset<32> instruction = IM.read(current_state.IF_stage.PC);
             next_state.ID_stage.ins = instruction;
 
+            //* 印出Cycle 1
+            if (cycle == 1)
+            {
+                ofstream out("E:/Computer_Organization/Project/Pipeline/Example1/ouput.txt", ios_base::out | ios_base::app);
+                ifstream in("E:/Computer_Organization/Project/Pipeline/Example1/input.txt");
+
+                out << "Cycle " << cycle << endl;
+
+                bitset<6> opcode = bitset<6>(shift_bits(instruction, 26));
+                bitset<6> funct = bitset<6>(shift_bits(instruction, 0));
+
+                //* R-type
+                if (!opcode.to_ulong())
+                {
+                    if (funct.to_ulong() == 32) //* add
+                    {
+                        out << "add: IF" << endl;
+                    }
+                    else //* sub
+                    {
+                        out << "sub: IF" << endl;
+                    }
+                }
+                else if (opcode.to_ulong() == 35) //* lw
+                {
+                    out << "lw: IF" << endl;
+                }
+                else if (opcode.to_ulong() == 43) //* sw
+                {
+                    out << "sw: IF" << endl;
+                }
+                else //* beq
+                {
+                    out << "beq: IF" << endl;
+                }
+
+                in.close();
+                out.close();
+
+                cycle++;
+            }
+
             //* 32bits個1的指令表示結束
             if (instruction.to_string<char, std::string::traits_type, std::string::allocator_type>() == "11111111111111111111111111111111")
             {
                 current_state.IF_stage.implement = 0;
+                next_state.IF_stage.implement = 0;
             }
             else
             {
@@ -202,7 +245,7 @@ int main()
             next_state.EX_stage.Read_data2 = RF.read(reg2);
 
             //* lw、sw、add -> add，sub -> sub
-            if (opcode.to_ulong() == 35 || opcode.to_ulong() == 43 || funct.to_ulong() == 33)
+            if (opcode.to_ulong() == 35 || opcode.to_ulong() == 43 || funct.to_ulong() == 32)
             {
                 next_state.EX_stage.ALUOp = 1;
             }
@@ -212,7 +255,7 @@ int main()
             }
 
             //* Control Sign
-            if (opcode.to_ulong() == 43 || funct.to_ulong() == 32) // sw、beq
+            if (opcode.to_ulong() == 43 || opcode.to_ulong() == 4) // sw、beq
             {
                 next_state.EX_stage.RegDst = 'X';
                 next_state.EX_stage.MemtoReg = 'X';
@@ -338,7 +381,7 @@ int main()
             next_state.MEM_stage.MemRead = current_state.EX_stage.MemRead;
             next_state.MEM_stage.MemWrite = current_state.EX_stage.MemWrite;
             next_state.MEM_stage.RegWrite = current_state.EX_stage.RegWrite;
-            next_state.MEM_stage.MemtoReg = current_state.MEM_stage.MemtoReg;
+            next_state.MEM_stage.MemtoReg = current_state.EX_stage.MemtoReg;
 
             next_state.MEM_stage.implement = current_state.EX_stage.implement;
         }
