@@ -13,7 +13,7 @@ using namespace std;
 
 void save_state(int cycle, State state)
 {
-    ofstream file("E:/Computer_Organization/Project/Pipeline/Example2/state.txt", ios_base::out | ios_base::app);
+    ofstream file("E:/Computer_Organization/Project/Pipeline/Forwarding/Example2/state.txt", ios_base::out | ios_base::app);
 
     file << "Cycle " << cycle << endl;
 
@@ -76,7 +76,7 @@ void save_state(int cycle, State state)
 
 void output(int cycle, State state)
 {
-    ofstream file("E:/Computer_Organization/Project/Pipeline/Example2/ouput.txt", ios_base::out | ios_base::app);
+    ofstream file("E:/Computer_Organization/Project/Pipeline/Forwarding/Example2/ouput.txt", ios_base::out | ios_base::app);
 
     file << "Cycle " << cycle << endl;
 
@@ -137,6 +137,7 @@ unsigned long shift_bits(bitset<32> ins, int start)
     return ((ins.to_ulong()) >> start); //* 需轉成int才能位移
 }
 
+//* 將16bits sign-extend 成32bits
 bitset<32> sign_extend(bitset<16> i_address)
 {
     string extended_address;
@@ -254,6 +255,7 @@ int main()
             }
 
             next_state.ID_stage.implement = current_state.IF_stage.implement;
+
             //* 32bits個1的指令表示結束
             if (instruction.to_string<char, std::string::traits_type, std::string::allocator_type>() == "11111111111111111111111111111111")
             {
@@ -331,8 +333,8 @@ int main()
             bitset<5> reg2 = bitset<5>(shift_bits(current_state.ID_stage.ins, 16));
             next_state.EX_stage.rs = reg1;
             next_state.EX_stage.rt = reg2;
-            bitset<16> iaddr = bitset<16>(shift_bits(current_state.ID_stage.ins, 0));
-            next_state.EX_stage.I_address = iaddr;
+            next_state.EX_stage.I_address = bitset<16>(shift_bits(current_state.ID_stage.ins, 0));
+
             //* 若為R-type指令: write_register = rd
             if (opcode.to_ulong() == 0)
             {
@@ -349,7 +351,7 @@ int main()
             next_state.EX_stage.Read_data1 = RF.read(reg1);
             next_state.EX_stage.Read_data2 = RF.read(reg2);
 
-            //* lw、sw、add -> add，sub -> sub
+            //* lw、sw、add -> add(1)，sub -> sub(0)
             if (opcode.to_ulong() == 35 || opcode.to_ulong() == 43 || funct.to_ulong() == 32)
             {
                 next_state.EX_stage.ALUOp = 1;
@@ -378,6 +380,7 @@ int main()
                 next_state.EX_stage.MemtoReg = '0';
                 next_state.EX_stage.RegWrite = 1;
             }
+
             next_state.EX_stage.ALUSrc = (opcode.to_ulong() == 35 || opcode.to_ulong() == 43) ? 1 : 0;
             next_state.EX_stage.Branch = (opcode.to_ulong() == 4) ? 1 : 0;
             next_state.EX_stage.MemRead = (opcode.to_ulong() == 35) ? 1 : 0;
