@@ -13,7 +13,7 @@ using namespace std;
 
 void save_state(int cycle, State state)
 {
-    ofstream file("E:/Computer_Organization/Project/Pipeline/Example2/state.txt", ios_base::out | ios_base::app);
+    ofstream file("Example/state.txt", ios_base::out | ios_base::app);
 
     file << "Cycle " << cycle << endl;
 
@@ -26,6 +26,7 @@ void save_state(int cycle, State state)
     file << "instruction_name:\t" << state.ID_stage.ins_name << endl;
     file << "implement:\t" << state.ID_stage.implement << endl;
     file << "ins:\t" << state.ID_stage.ins << endl;
+    file << "stall:\t" << state.ID_stage.stall << endl;
 
     file << "\n[EX_stage]" << endl;
     file << "instruction_name:\t" << state.EX_stage.ins_name << endl;
@@ -76,7 +77,7 @@ void save_state(int cycle, State state)
 
 void output(int cycle, State state)
 {
-    ofstream file("E:/Computer_Organization/Project/Pipeline/Example2/ouput.txt", ios_base::out | ios_base::app);
+    ofstream file("Example/ouput.txt", ios_base::out | ios_base::app);
 
     file << "Cycle " << cycle << endl;
 
@@ -165,269 +166,62 @@ int main()
 
     while (true)
     {
-        //* Branch Hazard
-        //* beq的opcode[31~26]為000100->4，且當rs=rt時[Register comparator在ID Stage]，執行beq指令
-        if (bitset<6>(shift_bits(current_state.ID_stage.ins, 26)).to_ulong() == 4 && RF.read(bitset<5>(shift_bits(current_state.ID_stage.ins, 21))).to_ulong() == RF.read(bitset<5>(shift_bits(current_state.ID_stage.ins, 16))).to_ulong())
+        //! WB Stage: Write result back to register
+        //* WB Stage執行時
+        if (current_state.WB_stage.implement)
         {
-            //* 執行beq指令，則會停止下一個指令繼續執行，跳去別的指令
-            if (current_state.ID_stage.implement)
+            //* 更新Register File
+            if (current_state.WB_stage.RegWrite) // R-type、lw
             {
-                next_state.ID_stage.implement = 0;
-                next_state.IF_stage.PC = bitset<32>(current_state.IF_stage.PC.to_ulong() + 4 + (bitset<32>((bitset<30>(shift_bits(current_state.ID_stage.ins, 0))).to_string<char, std::string::traits_type, std::string::allocator_type>() + "00")).to_ulong());
+                RF.write(current_state.WB_stage.Write_reg, current_state.WB_stage.Write_data);
             }
-            else
+        }
+
+        //! MEM Stage: Access memory operand
+        //* MEM Stage執行時
+        if (current_state.MEM_stage.implement)
+        {
+            //* MEM to MEM forward
+            //* 1.確認是否已有執行至WB_stage 2.判斷前前指令必須是會更新暫存器的 3.寫入的暫存器必須非$0 4.write_reg = rt 時發生
+            //* ex: lw的rt = sw的rt 將lw從memory讀出的資料，直接forwarding給sw存入memory
+            if (current_state.WB_stage.implement && current_state.WB_stage.RegWrite && current_state.WB_stage.Write_reg.to_ulong() != 0 && current_state.WB_stage.Write_reg == current_state.MEM_stage.rt)
             {
-                //* PC = PC + 4
-                next_state.IF_stage.PC = bitset<32>(current_state.IF_stage.PC.to_ulong() + 4);
+                current_state.MEM_stage.Write_data = current_state.WB_stage.Write_data;
             }
+
+            //* 依指令更新Write_data及Data_memory
+            if (current_state.MEM_stage.MemRead) //* lw
+            {
+                next_state.WB_stage.Write_data = DM.read(current_state.MEM_stage.ALU_result); // load data
+            }
+            else if (current_state.MEM_stage.MemWrite) //* sw
+            {
+                DM.write(current_state.MEM_stage.ALU_result, current_state.MEM_stage.Write_data); // store data
+                next_state.WB_stage.Write_data = current_state.WB_stage.Write_data;               // MemtoReg = don't care，不會Write Back回暫存器，因此Write_data保持不變即可
+            }
+            else if (current_state.MEM_stage.Branch) //* beq
+            {
+                next_state.WB_stage.Write_data = current_state.WB_stage.Write_data; // MemtoReg = don't care，不會Write Back回暫存器，因此Write_data保持不變即可
+            }
+            else //* R-type
+            {
+                next_state.WB_stage.Write_data = current_state.MEM_stage.ALU_result; // 要寫回暫存器之資料，即為ALU運算結果
+            }
+
+            //* 更新下一Stage資訊
+            next_state.WB_stage.rs = current_state.MEM_stage.rs;
+            next_state.WB_stage.rt = current_state.MEM_stage.rt;
+            next_state.WB_stage.Write_reg = current_state.MEM_stage.Write_reg;
+
+            next_state.WB_stage.RegWrite = current_state.MEM_stage.RegWrite;
+            next_state.WB_stage.MemtoReg = current_state.MEM_stage.MemtoReg;
+
+            next_state.WB_stage.implement = current_state.MEM_stage.implement;
+            next_state.WB_stage.ins_name = current_state.MEM_stage.ins_name;
         }
         else
         {
-            //* PC = PC + 4
-            next_state.IF_stage.PC = bitset<32>(current_state.IF_stage.PC.to_ulong() + 4);
-        }
-        //* Load-Use Data Hazard
-        if (current_state.EX_stage.type && current_state.EX_stage.MemRead) // type=1 -> I-type，MemRead只有lw指令為1
-        {
-            //* 判斷是否為sw指令，sw的opcode[31~26]為101011->43
-            if ((bitset<6>(shift_bits(current_state.ID_stage.ins, 26))).to_ulong() == 43)
-            {
-                //* 因為lw為I-type指令，因此write_register為rt
-                //* 當lw還沒從記憶體讀取data，sw便無法從rs取得資料與sign_extend後的I-address做相加，來取得data_memory address
-                if (current_state.EX_stage.rt == bitset<5>(shift_bits(current_state.ID_stage.ins, 21))) // 向右移21bits再取最小的5個bit，也就是rs
-                {
-                    next_state.IF_stage = current_state.IF_stage; // 維持在IF stage
-                    next_state.IF_stage.ins_name = current_state.IF_stage.ins_name;
-                }
-            }
-            else //* R-type指令
-            {
-                //* 當lw還沒從記憶體讀取data，R-type指令便無法從rs和rt取得資料
-                if (current_state.EX_stage.rt == bitset<5>(shift_bits(current_state.ID_stage.ins, 21)) && current_state.EX_stage.implement && bitset<6>(shift_bits(current_state.ID_stage.ins, 26)) == bitset<6>("000000")) // opcode全為0 -> R-type
-                {
-                    next_state.IF_stage = current_state.IF_stage; // 維持在IF stage
-                    next_state.IF_stage.ins_name = current_state.IF_stage.ins_name;
-                }
-                if (current_state.EX_stage.rt == bitset<5>(shift_bits(current_state.ID_stage.ins, 16)) && current_state.EX_stage.implement && bitset<6>(shift_bits(current_state.ID_stage.ins, 26)) == bitset<6>("000000")) // opcode全為0 -> R-type
-                {
-                    next_state.IF_stage = current_state.IF_stage; // 維持在IF stage
-                    next_state.IF_stage.ins_name = current_state.IF_stage.ins_name;
-                }
-            }
-        }
-
-        //! IF Stage: Instruction fetch from memory
-        //* IF Stage執行時
-        if (current_state.IF_stage.implement)
-        {
-            //* 透過IF的PC 讀取instruction memory(IM)的指令
-            bitset<32> instruction = IM.read(current_state.IF_stage.PC);
-            next_state.ID_stage.ins = instruction;
-
-            //* 先向右位移  透過bitset 只存取最右邊6bits
-            bitset<6> opcode = bitset<6>(shift_bits(instruction, 26));
-            bitset<6> funct = bitset<6>(shift_bits(instruction, 0));
-
-            //* 判斷指令名稱
-            if (!opcode.to_ulong()) // R-type
-            {
-                if (funct.to_ulong() == 32) // add
-                {
-                    current_state.IF_stage.ins_name = "add";
-                }
-                else // sub
-                {
-                    current_state.IF_stage.ins_name = "sub";
-                }
-            }
-            else if (opcode.to_ulong() == 35) // lw
-            {
-                current_state.IF_stage.ins_name = "lw";
-            }
-            else if (opcode.to_ulong() == 43) // sw
-            {
-                current_state.IF_stage.ins_name = "sw";
-            }
-            else // beq
-            {
-                current_state.IF_stage.ins_name = "beq";
-            }
-
-            next_state.ID_stage.implement = current_state.IF_stage.implement;
-            //* 32bits個1的指令表示結束
-            if (instruction.to_string<char, std::string::traits_type, std::string::allocator_type>() == "11111111111111111111111111111111")
-            {
-                current_state.IF_stage.implement = 0;
-                next_state.IF_stage.implement = 0;
-                next_state.ID_stage.ins_name = current_state.IF_stage.ins_name;
-            }
-            else
-            {
-                //* Load-Use Data Hazard
-                if (current_state.EX_stage.type && current_state.EX_stage.MemRead) // type=1 -> I-type，MemRead只有lw指令為1
-                {
-                    //* 判斷是否為sw指令，sw的opcode[31~26]為101011->43
-                    if ((bitset<6>(shift_bits(current_state.ID_stage.ins, 26))).to_ulong() == 43)
-                    {
-                        //* 因為lw為I-type指令，因此write_register為rt
-                        //* 當lw還沒從記憶體讀取data，sw便無法從rs取得資料與sign_extend後的I-address做相加，來取得data_memory address
-                        if (current_state.EX_stage.rt == bitset<5>(shift_bits(current_state.ID_stage.ins, 21))) // 向右移21bits再取最小的5個bit，也就是rs
-                        {
-                            next_state.ID_stage = current_state.ID_stage; // 維持在ID stage
-                            next_state.ID_stage.ins_name = current_state.ID_stage.ins_name;
-                        }
-                    }
-                    else //* R-type指令
-                    {
-                        //* 當lw還沒從記憶體讀取data，R-type指令便無法從rs和rt取得資料
-                        if (current_state.EX_stage.rt == bitset<5>(shift_bits(current_state.ID_stage.ins, 21)) && current_state.EX_stage.implement && bitset<6>(shift_bits(current_state.ID_stage.ins, 26)) == bitset<6>("000000")) // opcode全為0 -> R-type
-                        {
-                            next_state.ID_stage = current_state.ID_stage; // 維持在ID stage
-                            next_state.ID_stage.ins_name = current_state.ID_stage.ins_name;
-                        }
-                        if (current_state.EX_stage.rt == bitset<5>(shift_bits(current_state.ID_stage.ins, 16)) && current_state.EX_stage.implement && bitset<6>(shift_bits(current_state.ID_stage.ins, 26)) == bitset<6>("000000")) // opcode全為0 -> R-type
-                        {
-                            next_state.ID_stage = current_state.ID_stage; // 維持在ID stage
-                            next_state.ID_stage.ins_name = current_state.ID_stage.ins_name;
-                        }
-                    }
-                }
-                //* Branch Hazard
-                //* beq的opcode[31~26]為000100->4，且當rs=rt時[Register comparator在ID Stage]，執行beq指令
-                else if (bitset<6>(shift_bits(current_state.ID_stage.ins, 26)).to_ulong() == 4 && RF.read(bitset<5>(shift_bits(current_state.ID_stage.ins, 21))).to_ulong() == RF.read(bitset<5>(shift_bits(current_state.ID_stage.ins, 16))).to_ulong())
-                {
-                    //* 執行beq指令，則會停止下一個指令繼續執行，跳去別的指令
-                    if (current_state.ID_stage.implement)
-                    {
-                        next_state.ID_stage.implement = 0;
-                        next_state.IF_stage.PC = bitset<32>(current_state.IF_stage.PC.to_ulong() + 4 + (bitset<32>((bitset<30>(shift_bits(current_state.ID_stage.ins, 0))).to_string<char, std::string::traits_type, std::string::allocator_type>() + "00")).to_ulong());
-                    }
-                    else
-                    {
-                        //* PC = PC + 4
-                        next_state.IF_stage.PC = bitset<32>(current_state.IF_stage.PC.to_ulong() + 4);
-                        next_state.ID_stage.ins_name = current_state.IF_stage.ins_name;
-                    }
-                }
-                else
-                {
-                    next_state.ID_stage.ins_name = current_state.IF_stage.ins_name;
-                }
-            }
-        }
-        else
-        {
-            next_state.ID_stage.implement = current_state.IF_stage.implement;
-        }
-
-        //! ID Stage: Instruction decode & register read
-        //* ID Stage執行時
-        if (current_state.ID_stage.implement)
-        {
-            bitset<6> opcode = bitset<6>(shift_bits(current_state.ID_stage.ins, 26));
-            bitset<6> funct = bitset<6>(shift_bits(current_state.ID_stage.ins, 0));
-
-            bitset<5> reg1 = bitset<5>(shift_bits(current_state.ID_stage.ins, 21));
-            bitset<5> reg2 = bitset<5>(shift_bits(current_state.ID_stage.ins, 16));
-            next_state.EX_stage.rs = reg1;
-            next_state.EX_stage.rt = reg2;
-            bitset<16> iaddr = bitset<16>(shift_bits(current_state.ID_stage.ins, 0));
-            next_state.EX_stage.I_address = iaddr;
-            //* 若為R-type指令: write_register = rd
-            if (opcode.to_ulong() == 0)
-            {
-                next_state.EX_stage.Write_reg = bitset<5>(shift_bits(current_state.ID_stage.ins, 11));
-                next_state.EX_stage.type = 0;
-            }
-            else //* 反之為I-type指令: write_register = rt
-            {
-                next_state.EX_stage.Write_reg = reg2;
-                next_state.EX_stage.type = 1;
-            }
-
-            //* ALU input
-            next_state.EX_stage.Read_data1 = RF.read(reg1);
-            next_state.EX_stage.Read_data2 = RF.read(reg2);
-
-            //* lw、sw、add -> add，sub -> sub
-            if (opcode.to_ulong() == 35 || opcode.to_ulong() == 43 || funct.to_ulong() == 32)
-            {
-                next_state.EX_stage.ALUOp = 1;
-            }
-            else
-            {
-                next_state.EX_stage.ALUOp = 0;
-            }
-
-            //* Control Sign
-            if (opcode.to_ulong() == 43 || opcode.to_ulong() == 4) // sw、beq
-            {
-                next_state.EX_stage.RegDst = 'X';
-                next_state.EX_stage.MemtoReg = 'X';
-                next_state.EX_stage.RegWrite = 0;
-            }
-            else if (opcode.to_ulong() == 35) // lw
-            {
-                next_state.EX_stage.RegDst = '0';
-                next_state.EX_stage.MemtoReg = '1';
-                next_state.EX_stage.RegWrite = 1;
-            }
-            else // R-type
-            {
-                next_state.EX_stage.RegDst = '1';
-                next_state.EX_stage.MemtoReg = '0';
-                next_state.EX_stage.RegWrite = 1;
-            }
-            next_state.EX_stage.ALUSrc = (opcode.to_ulong() == 35 || opcode.to_ulong() == 43) ? 1 : 0;
-            next_state.EX_stage.Branch = (opcode.to_ulong() == 4) ? 1 : 0;
-            next_state.EX_stage.MemRead = (opcode.to_ulong() == 35) ? 1 : 0;
-            next_state.EX_stage.MemWrite = (opcode.to_ulong() == 43) ? 1 : 0;
-
-            next_state.EX_stage.implement = current_state.ID_stage.implement;
-            next_state.EX_stage.ins_name = current_state.ID_stage.ins_name;
-
-            //* Load-Use Data Hazard
-            if (current_state.EX_stage.type && current_state.EX_stage.MemRead) // type=1 -> I-type，MemRead只有lw指令為1
-            {
-                //* 判斷是否為sw指令，sw的opcode[31~26]為101011->43
-                if ((bitset<6>(shift_bits(current_state.ID_stage.ins, 26))).to_ulong() == 43)
-                {
-                    //* 因為lw為I-type指令，因此write_register為rt
-                    //* 當lw還沒從記憶體讀取data，sw便無法從rs取得資料與sign_extend後的I-address做相加，來取得data_memory address
-                    if (current_state.EX_stage.rt == bitset<5>(shift_bits(current_state.ID_stage.ins, 21))) // 向右移21bits再取最小的5個bit，也就是rs
-                    {
-                        next_state.EX_stage.implement = 0; // 維持在ID stage
-                    }
-                }
-                else //* R-type指令
-                {
-                    //* 當lw還沒從記憶體讀取data，R-type指令便無法從rs和rt取得資料
-                    if (current_state.EX_stage.rt == bitset<5>(shift_bits(current_state.ID_stage.ins, 21)) && current_state.EX_stage.implement && bitset<6>(shift_bits(current_state.ID_stage.ins, 26)) == bitset<6>("000000")) // opcode全為0 -> R-type
-                    {
-                        next_state.EX_stage.implement = 0; // 維持在ID stage
-                    }
-                    if (current_state.EX_stage.rt == bitset<5>(shift_bits(current_state.ID_stage.ins, 16)) && current_state.EX_stage.implement && bitset<6>(shift_bits(current_state.ID_stage.ins, 26)) == bitset<6>("000000")) // opcode全為0 -> R-type
-                    {
-                        next_state.EX_stage.implement = 0; // 維持在ID stage
-                    }
-                }
-            }
-
-            // TODO
-            //* Branch Hazard
-            //* beq的opcode[31~26]為000100->4，且當rs=rt時[Register comparator在ID Stage]，執行beq指令
-            if (opcode.to_ulong() == 4)
-            {
-                next_state.EX_stage.Write_reg = bitset<5>("00000");
-            }
-            if (opcode.to_ulong() == 4 && RF.read(reg1).to_ulong() != RF.read(reg2).to_ulong())
-            {
-                current_state.IF_stage.PC = bitset<32>(current_state.IF_stage.PC.to_ulong() - 4);
-            }
-        }
-        else
-        {
-            next_state.EX_stage.implement = current_state.ID_stage.implement;
+            next_state.WB_stage.implement = current_state.MEM_stage.implement;
         }
 
         //! EX Stage: Execute operation or calculate address
@@ -497,65 +291,201 @@ int main()
             next_state.MEM_stage.implement = current_state.EX_stage.implement;
         }
 
-        //! MEM Stage: Access memory operand
-        //* MEM Stage執行時
-        if (current_state.MEM_stage.implement)
+        //! ID Stage: Instruction decode & register read
+        //* ID Stage執行時
+        if (current_state.ID_stage.implement)
         {
-            //* MEM to MEM forward
-            //* 1.確認是否已有執行至WB_stage 2.判斷前前指令必須是會更新暫存器的 3.寫入的暫存器必須非$0 4.write_reg = rt 時發生
-            //* ex: lw的rt = sw的rt 將lw從memory讀出的資料，直接forwarding給sw存入memory
-            if (current_state.WB_stage.implement && current_state.WB_stage.RegWrite && current_state.WB_stage.Write_reg.to_ulong() != 0 && current_state.WB_stage.Write_reg == current_state.MEM_stage.rt)
+            //* 先解析instruction
+            bitset<6> opcode = bitset<6>(shift_bits(current_state.ID_stage.ins, 26));
+            bitset<6> funct = bitset<6>(shift_bits(current_state.ID_stage.ins, 0));
+            bitset<5> reg1 = bitset<5>(shift_bits(current_state.ID_stage.ins, 21));
+            bitset<5> reg2 = bitset<5>(shift_bits(current_state.ID_stage.ins, 16));
+            bitset<16> iaddr = bitset<16>(shift_bits(current_state.ID_stage.ins, 0));
+
+            // 假設無hazzard發生
+            next_state.EX_stage.rs = reg1;
+            next_state.EX_stage.rt = reg2;
+            next_state.EX_stage.I_address = iaddr;
+            //* 若為R-type指令: write_register = rd
+            if (opcode.to_ulong() == 0)
             {
-                current_state.MEM_stage.Write_data = current_state.WB_stage.Write_data;
+                next_state.EX_stage.Write_reg = bitset<5>(shift_bits(current_state.ID_stage.ins, 11));
+                next_state.EX_stage.type = 0;
+            }
+            else //* 反之為I-type指令: write_register = rt
+            {
+                next_state.EX_stage.Write_reg = reg2;
+                next_state.EX_stage.type = 1;
             }
 
-            //* 依指令更新Write_data及Data_memory
-            if (current_state.MEM_stage.MemRead) //* lw
+            //* ALU input
+            next_state.EX_stage.Read_data1 = RF.read(reg1);
+            next_state.EX_stage.Read_data2 = RF.read(reg2);
+
+            //* lw、sw、add -> add，sub -> sub
+            if (opcode.to_ulong() == 35 || opcode.to_ulong() == 43 || funct.to_ulong() == 32)
             {
-                next_state.WB_stage.Write_data = DM.read(current_state.MEM_stage.ALU_result); // load data
+                next_state.EX_stage.ALUOp = 1;
             }
-            else if (current_state.MEM_stage.MemWrite) //* sw
+            else
             {
-                DM.write(current_state.MEM_stage.ALU_result, current_state.MEM_stage.Write_data); // store data
-                next_state.WB_stage.Write_data = current_state.WB_stage.Write_data;               // MemtoReg = don't care，不會Write Back回暫存器，因此Write_data保持不變即可
-            }
-            else if (current_state.MEM_stage.Branch) //* beq
-            {
-                next_state.WB_stage.Write_data = current_state.WB_stage.Write_data; // MemtoReg = don't care，不會Write Back回暫存器，因此Write_data保持不變即可
-            }
-            else //* R-type
-            {
-                next_state.WB_stage.Write_data = current_state.MEM_stage.ALU_result; // 要寫回暫存器之資料，即為ALU運算結果
+                next_state.EX_stage.ALUOp = 0;
             }
 
-            //* 更新下一Stage資訊
-            next_state.WB_stage.rs = current_state.MEM_stage.rs;
-            next_state.WB_stage.rt = current_state.MEM_stage.rt;
-            next_state.WB_stage.Write_reg = current_state.MEM_stage.Write_reg;
+            //* Control Sign
+            if (opcode.to_ulong() == 43 || opcode.to_ulong() == 4) // sw、beq
+            {
+                next_state.EX_stage.RegDst = 'X';
+                next_state.EX_stage.MemtoReg = 'X';
+                next_state.EX_stage.RegWrite = 0;
+            }
+            else if (opcode.to_ulong() == 35) // lw
+            {
+                next_state.EX_stage.RegDst = '0';
+                next_state.EX_stage.MemtoReg = '1';
+                next_state.EX_stage.RegWrite = 1;
+            }
+            else // R-type
+            {
+                next_state.EX_stage.RegDst = '1';
+                next_state.EX_stage.MemtoReg = '0';
+                next_state.EX_stage.RegWrite = 1;
+            }
+            next_state.EX_stage.ALUSrc = (opcode.to_ulong() == 35 || opcode.to_ulong() == 43) ? 1 : 0;
+            next_state.EX_stage.Branch = (opcode.to_ulong() == 4) ? 1 : 0;
+            next_state.EX_stage.MemRead = (opcode.to_ulong() == 35) ? 1 : 0;
+            next_state.EX_stage.MemWrite = (opcode.to_ulong() == 43) ? 1 : 0;
+            next_state.EX_stage.implement = current_state.ID_stage.implement;
+            next_state.EX_stage.ins_name = current_state.ID_stage.ins_name;
 
-            next_state.WB_stage.RegWrite = current_state.MEM_stage.RegWrite;
-            next_state.WB_stage.MemtoReg = current_state.MEM_stage.MemtoReg;
-
-            next_state.WB_stage.implement = current_state.MEM_stage.implement;
-            next_state.WB_stage.ins_name = current_state.MEM_stage.ins_name;
+            //* 判斷是否有Load-Use hazzard發生
+            if (current_state.EX_stage.type && current_state.EX_stage.MemRead) // type=1 -> I-type，MemRead只有lw指令為1
+            {
+                //* 判斷是否為sw指令，sw的opcode[31~26]為101011->43
+                if ((bitset<6>(shift_bits(current_state.ID_stage.ins, 26))).to_ulong() == 43)
+                {
+                    //* 因為lw為I-type指令，因此write_register為rt
+                    //* 當lw還沒從記憶體讀取data，sw便無法從rs取得資料與sign_extend後的I-address做相加，來取得data_memory address
+                    if (current_state.EX_stage.rt == bitset<5>(shift_bits(current_state.ID_stage.ins, 21))) // 向右移21bits再取最小的5個bit，也就是rs
+                    {
+                        next_state.ID_stage = current_state.ID_stage; // 維持在ID stage
+                        current_state.ID_stage.stall = true;
+                        next_state.EX_stage.implement = false; // 下一階段的EX不需implement
+                    }
+                }
+                else //* R-type指令
+                {
+                    //* 當lw還沒從記憶體讀取data，R-type指令便無法從rs和rt取得資料
+                    if (current_state.EX_stage.rt == bitset<5>(shift_bits(current_state.ID_stage.ins, 21)) && current_state.EX_stage.implement && bitset<6>(shift_bits(current_state.ID_stage.ins, 26)) == bitset<6>("000000")) // opcode全為0 -> R-type
+                    {
+                        next_state.ID_stage = current_state.ID_stage; // 維持在ID stage
+                        current_state.ID_stage.stall = true;
+                        next_state.EX_stage.implement = false; // 下一階段的EX不需implement
+                    }
+                    if (current_state.EX_stage.rt == bitset<5>(shift_bits(current_state.ID_stage.ins, 16)) && current_state.EX_stage.implement && bitset<6>(shift_bits(current_state.ID_stage.ins, 26)) == bitset<6>("000000")) // opcode全為0 -> R-type
+                    {
+                        next_state.ID_stage = current_state.ID_stage; // 維持在ID stage
+                        current_state.ID_stage.stall = true;
+                        next_state.EX_stage.implement = false; // 下一階段的EX不需implement
+                    }
+                }
+            }
+            
+            //! TODO
+            //* 判斷是否有Branch Hazard發生
+            //* beq的opcode[31~26]為000100->4，且當rs=rt時[Register comparator在ID Stage]，執行beq指令
+            if (opcode.to_ulong() == 4)
+            {
+                next_state.EX_stage.Write_reg = bitset<5>("00000");
+            }
+            if (opcode.to_ulong() == 4 && RF.read(reg1).to_ulong() != RF.read(reg2).to_ulong())
+            {
+                current_state.IF_stage.PC = bitset<32>(current_state.IF_stage.PC.to_ulong() - 4);
+            }
+            //* Branch Hazzard End
         }
         else
         {
-            next_state.WB_stage.implement = current_state.MEM_stage.implement;
+            next_state.EX_stage.implement = current_state.ID_stage.implement;
         }
 
-        //! WB Stage: Write result back to register
-        //* WB Stage執行時
-        if (current_state.WB_stage.implement)
+        //! IF Stage: Instruction fetch from memory
+        //* IF Stage執行時
+        if (current_state.IF_stage.implement)
         {
-            //* 更新Register File
-            if (current_state.WB_stage.RegWrite) // R-type、lw
+            // 不管怎樣都先透過PC抓指令
+
+            //* 透過IF的PC 讀取instruction memory(IM)的指令
+            bitset<32> instruction = IM.read(current_state.IF_stage.PC);
+            next_state.ID_stage.ins = instruction;
+
+            //* 先向右位移  透過bitset 只存取最右邊6bits
+            bitset<6> opcode = bitset<6>(shift_bits(instruction, 26));
+            bitset<6> funct = bitset<6>(shift_bits(instruction, 0));
+
+            //* 判斷指令名稱
+            if (!opcode.to_ulong()) // R-type
             {
-                RF.write(current_state.WB_stage.Write_reg, current_state.WB_stage.Write_data);
+                if (funct.to_ulong() == 32) // add
+                {
+                    current_state.IF_stage.ins_name = "add";
+                }
+                else // sub
+                {
+                    current_state.IF_stage.ins_name = "sub";
+                }
+            }
+            else if (opcode.to_ulong() == 35) // lw
+            {
+                current_state.IF_stage.ins_name = "lw";
+            }
+            else if (opcode.to_ulong() == 43) // sw
+            {
+                current_state.IF_stage.ins_name = "sw";
+            }
+            else if (opcode.to_ullong() == 4) // beq
+            {
+                current_state.IF_stage.ins_name = "beq";
+            }
+            else
+            {
+                current_state.IF_stage.ins_name = "halt";
+            }
+
+            //* 32bits個1的指令表示結束
+            if (instruction.to_string<char, std::string::traits_type, std::string::allocator_type>() == "11111111111111111111111111111111")
+            {
+                current_state.IF_stage.implement = 0;
+                next_state.IF_stage.implement = 0;
+
+                next_state.ID_stage.ins_name = current_state.IF_stage.ins_name;
+                next_state.ID_stage.implement = 0;
+            }
+            // 不是 halt 的狀況
+            else
+            {
+                //* ID時hazzard發生需要stall 因此IF也需要跟著stall
+                if (current_state.ID_stage.stall)
+                {
+                    next_state.IF_stage = current_state.IF_stage; // 停留在IF
+                }
+                // * hazzard沒發生
+                else
+                {
+                    //* PC = PC + 4
+                    next_state.IF_stage.PC = bitset<32>(current_state.IF_stage.PC.to_ulong() + 4);
+                    next_state.ID_stage.ins_name = current_state.IF_stage.ins_name;
+                    next_state.ID_stage.implement = current_state.IF_stage.implement;
+                }
             }
         }
+        // IF 沒implement時 將implement = false的狀態傳遞下去
+        else
+        {
+            next_state.ID_stage.implement = current_state.IF_stage.implement;
+        }
 
-        //! 當所有Stage不執行時，即為結束
+        //! 當所有Stage也需stall時，即為結束
         if (!current_state.IF_stage.implement && !current_state.ID_stage.implement && !current_state.EX_stage.implement && !current_state.MEM_stage.implement && !current_state.WB_stage.implement)
         {
             break;

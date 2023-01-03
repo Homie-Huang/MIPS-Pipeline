@@ -17,5 +17,5 @@ public:
     bool implement;
 
     //* 儲存當前狀態指令名稱
-    string ins_name; 
+    string ins_name;
 };
