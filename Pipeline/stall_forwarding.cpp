@@ -13,19 +13,22 @@ using namespace std;
 
 void save_state(int cycle, State state)
 {
-    ofstream file("E:/Computer_Organization/Project/Pipeline/Example1/ouput.txt", ios_base::out | ios_base::app);
+    ofstream file("E:/Computer_Organization/Project/Pipeline/Example2/state.txt", ios_base::out | ios_base::app);
 
     file << "Cycle " << cycle << endl;
 
     file << "\n[IF_stage]" << endl;
+    file << "instruction_name:\t" << state.IF_stage.ins_name << endl;
     file << "implement:\t" << state.IF_stage.implement << endl;
     file << "PC:\t" << state.IF_stage.PC.to_ulong() << endl;
 
     file << "\n[ID_stage]" << endl;
+    file << "instruction_name:\t" << state.ID_stage.ins_name << endl;
     file << "implement:\t" << state.ID_stage.implement << endl;
     file << "ins:\t" << state.ID_stage.ins << endl;
 
     file << "\n[EX_stage]" << endl;
+    file << "instruction_name:\t" << state.EX_stage.ins_name << endl;
     file << "implement:\t" << state.EX_stage.implement << endl;
     file << "rs:\t" << state.EX_stage.rs << endl;
     file << "rt:\t" << state.EX_stage.rt << endl;
@@ -44,6 +47,7 @@ void save_state(int cycle, State state)
     file << "MemtoReg:\t" << state.EX_stage.MemtoReg << endl;
 
     file << "\n[MEM_stage]" << endl;
+    file << "instruction_name:\t" << state.MEM_stage.ins_name << endl;
     file << "implement:\t" << state.MEM_stage.implement << endl;
     file << "rs:\t" << state.MEM_stage.rs << endl;
     file << "rt:\t" << state.MEM_stage.rt << endl;
@@ -57,6 +61,7 @@ void save_state(int cycle, State state)
     file << "MemtoReg:\t" << state.MEM_stage.MemtoReg << endl;
 
     file << "\n[WB_stage]" << endl;
+    file << "instruction_name:\t" << state.WB_stage.ins_name << endl;
     file << "implement:\t" << state.WB_stage.implement << endl;
     file << "rs:\t" << state.WB_stage.rs << endl;
     file << "rt:\t" << state.WB_stage.rt << endl;
@@ -69,9 +74,67 @@ void save_state(int cycle, State state)
     file.close();
 }
 
+void output(int cycle, State state)
+{
+    ofstream file("E:/Computer_Organization/Project/Pipeline/Example2/ouput.txt", ios_base::out | ios_base::app);
+
+    file << "Cycle " << cycle << endl;
+
+    if (state.WB_stage.implement)
+    {
+        file << state.WB_stage.ins_name << ": ";
+        file << "WB ";
+
+        file << state.WB_stage.RegWrite << " ";
+        file << state.WB_stage.MemtoReg << endl;
+    }
+
+    if (state.MEM_stage.implement)
+    {
+        file << state.MEM_stage.ins_name << ": ";
+        file << "MEM ";
+
+        file << state.MEM_stage.Branch << " ";
+        file << state.MEM_stage.MemRead << " ";
+        file << state.MEM_stage.MemWrite << " ";
+        file << state.MEM_stage.RegWrite << " ";
+        file << state.MEM_stage.MemtoReg << endl;
+    }
+
+    if (state.EX_stage.implement)
+    {
+        file << state.EX_stage.ins_name << ": ";
+        file << "EX ";
+
+        file << state.EX_stage.RegDst << " ";
+        file << state.EX_stage.ALUSrc << " ";
+        file << state.EX_stage.Branch << " ";
+        file << state.EX_stage.MemRead << " ";
+        file << state.EX_stage.MemWrite << " ";
+        file << state.EX_stage.RegWrite << " ";
+        file << state.EX_stage.MemtoReg << endl;
+    }
+
+    if (state.ID_stage.implement)
+    {
+        file << state.ID_stage.ins_name << ": ";
+        file << "ID" << endl;
+    }
+
+    if (state.IF_stage.implement)
+    {
+        file << state.IF_stage.ins_name << ": ";
+        file << "IF" << endl;
+    }
+
+    file << endl;
+    file.close();
+}
+
+//* 向右位移 n bits
 unsigned long shift_bits(bitset<32> ins, int start)
 {
-    return ((ins.to_ulong()) >> start);
+    return ((ins.to_ulong()) >> start); //* 需轉成int才能位移
 }
 
 bitset<32> sign_extend(bitset<16> i_address)
@@ -102,61 +165,101 @@ int main()
 
     while (true)
     {
+        //* Branch Hazard
+        //* beq的opcode[31~26]為000100->4，且當rs=rt時[Register comparator在ID Stage]，執行beq指令
+        if (bitset<6>(shift_bits(current_state.ID_stage.ins, 26)).to_ulong() == 4 && RF.read(bitset<5>(shift_bits(current_state.ID_stage.ins, 21))).to_ulong() == RF.read(bitset<5>(shift_bits(current_state.ID_stage.ins, 16))).to_ulong())
+        {
+            //* 執行beq指令，則會停止下一個指令繼續執行，跳去別的指令
+            if (current_state.ID_stage.implement)
+            {
+                next_state.ID_stage.implement = 0;
+                next_state.IF_stage.PC = bitset<32>(current_state.IF_stage.PC.to_ulong() + 4 + (bitset<32>((bitset<30>(shift_bits(current_state.ID_stage.ins, 0))).to_string<char, std::string::traits_type, std::string::allocator_type>() + "00")).to_ulong());
+            }
+            else
+            {
+                //* PC = PC + 4
+                next_state.IF_stage.PC = bitset<32>(current_state.IF_stage.PC.to_ulong() + 4);
+            }
+        }
+        else
+        {
+            //* PC = PC + 4
+            next_state.IF_stage.PC = bitset<32>(current_state.IF_stage.PC.to_ulong() + 4);
+        }
+        //* Load-Use Data Hazard
+        if (current_state.EX_stage.type && current_state.EX_stage.MemRead) // type=1 -> I-type，MemRead只有lw指令為1
+        {
+            //* 判斷是否為sw指令，sw的opcode[31~26]為101011->43
+            if ((bitset<6>(shift_bits(current_state.ID_stage.ins, 26))).to_ulong() == 43)
+            {
+                //* 因為lw為I-type指令，因此write_register為rt
+                //* 當lw還沒從記憶體讀取data，sw便無法從rs取得資料與sign_extend後的I-address做相加，來取得data_memory address
+                if (current_state.EX_stage.rt == bitset<5>(shift_bits(current_state.ID_stage.ins, 21))) // 向右移21bits再取最小的5個bit，也就是rs
+                {
+                    next_state.IF_stage = current_state.IF_stage; // 維持在IF stage
+                    next_state.IF_stage.ins_name = current_state.IF_stage.ins_name;
+                }
+            }
+            else //* R-type指令
+            {
+                //* 當lw還沒從記憶體讀取data，R-type指令便無法從rs和rt取得資料
+                if (current_state.EX_stage.rt == bitset<5>(shift_bits(current_state.ID_stage.ins, 21)) && current_state.EX_stage.implement && bitset<6>(shift_bits(current_state.ID_stage.ins, 26)) == bitset<6>("000000")) // opcode全為0 -> R-type
+                {
+                    next_state.IF_stage = current_state.IF_stage; // 維持在IF stage
+                    next_state.IF_stage.ins_name = current_state.IF_stage.ins_name;
+                }
+                if (current_state.EX_stage.rt == bitset<5>(shift_bits(current_state.ID_stage.ins, 16)) && current_state.EX_stage.implement && bitset<6>(shift_bits(current_state.ID_stage.ins, 26)) == bitset<6>("000000")) // opcode全為0 -> R-type
+                {
+                    next_state.IF_stage = current_state.IF_stage; // 維持在IF stage
+                    next_state.IF_stage.ins_name = current_state.IF_stage.ins_name;
+                }
+            }
+        }
+
         //! IF Stage: Instruction fetch from memory
         //* IF Stage執行時
         if (current_state.IF_stage.implement)
         {
-            // TODO
+            //* 透過IF的PC 讀取instruction memory(IM)的指令
             bitset<32> instruction = IM.read(current_state.IF_stage.PC);
             next_state.ID_stage.ins = instruction;
 
-            //* 印出Cycle 1
-            if (cycle == 1)
+            //* 先向右位移  透過bitset 只存取最右邊6bits
+            bitset<6> opcode = bitset<6>(shift_bits(instruction, 26));
+            bitset<6> funct = bitset<6>(shift_bits(instruction, 0));
+
+            //* 判斷指令名稱
+            if (!opcode.to_ulong()) // R-type
             {
-                ofstream out("E:/Computer_Organization/Project/Pipeline/Example1/ouput.txt", ios_base::out | ios_base::app);
-                ifstream in("E:/Computer_Organization/Project/Pipeline/Example1/input.txt");
-
-                out << "Cycle " << cycle << endl;
-
-                bitset<6> opcode = bitset<6>(shift_bits(instruction, 26));
-                bitset<6> funct = bitset<6>(shift_bits(instruction, 0));
-
-                //* R-type
-                if (!opcode.to_ulong())
+                if (funct.to_ulong() == 32) // add
                 {
-                    if (funct.to_ulong() == 32) //* add
-                    {
-                        out << "add: IF" << endl;
-                    }
-                    else //* sub
-                    {
-                        out << "sub: IF" << endl;
-                    }
+                    current_state.IF_stage.ins_name = "add";
                 }
-                else if (opcode.to_ulong() == 35) //* lw
+                else // sub
                 {
-                    out << "lw: IF" << endl;
+                    current_state.IF_stage.ins_name = "sub";
                 }
-                else if (opcode.to_ulong() == 43) //* sw
-                {
-                    out << "sw: IF" << endl;
-                }
-                else //* beq
-                {
-                    out << "beq: IF" << endl;
-                }
-
-                in.close();
-                out.close();
-
-                cycle++;
+            }
+            else if (opcode.to_ulong() == 35) // lw
+            {
+                current_state.IF_stage.ins_name = "lw";
+            }
+            else if (opcode.to_ulong() == 43) // sw
+            {
+                current_state.IF_stage.ins_name = "sw";
+            }
+            else // beq
+            {
+                current_state.IF_stage.ins_name = "beq";
             }
 
+            next_state.ID_stage.implement = current_state.IF_stage.implement;
             //* 32bits個1的指令表示結束
             if (instruction.to_string<char, std::string::traits_type, std::string::allocator_type>() == "11111111111111111111111111111111")
             {
                 current_state.IF_stage.implement = 0;
                 next_state.IF_stage.implement = 0;
+                next_state.ID_stage.ins_name = current_state.IF_stage.ins_name;
             }
             else
             {
@@ -168,9 +271,10 @@ int main()
                     {
                         //* 因為lw為I-type指令，因此write_register為rt
                         //* 當lw還沒從記憶體讀取data，sw便無法從rs取得資料與sign_extend後的I-address做相加，來取得data_memory address
-                        if (current_state.EX_stage.rt == bitset<5>(shift_bits(current_state.ID_stage.ins, 16))) // 向右移21bits再取最小的5個bit，也就是rs
+                        if (current_state.EX_stage.rt == bitset<5>(shift_bits(current_state.ID_stage.ins, 21))) // 向右移21bits再取最小的5個bit，也就是rs
                         {
                             next_state.ID_stage = current_state.ID_stage; // 維持在ID stage
+                            next_state.ID_stage.ins_name = current_state.ID_stage.ins_name;
                         }
                     }
                     else //* R-type指令
@@ -179,16 +283,18 @@ int main()
                         if (current_state.EX_stage.rt == bitset<5>(shift_bits(current_state.ID_stage.ins, 21)) && current_state.EX_stage.implement && bitset<6>(shift_bits(current_state.ID_stage.ins, 26)) == bitset<6>("000000")) // opcode全為0 -> R-type
                         {
                             next_state.ID_stage = current_state.ID_stage; // 維持在ID stage
+                            next_state.ID_stage.ins_name = current_state.ID_stage.ins_name;
                         }
                         if (current_state.EX_stage.rt == bitset<5>(shift_bits(current_state.ID_stage.ins, 16)) && current_state.EX_stage.implement && bitset<6>(shift_bits(current_state.ID_stage.ins, 26)) == bitset<6>("000000")) // opcode全為0 -> R-type
                         {
                             next_state.ID_stage = current_state.ID_stage; // 維持在ID stage
+                            next_state.ID_stage.ins_name = current_state.ID_stage.ins_name;
                         }
                     }
                 }
                 //* Branch Hazard
                 //* beq的opcode[31~26]為000100->4，且當rs=rt時[Register comparator在ID Stage]，執行beq指令
-                if (bitset<6>(shift_bits(current_state.ID_stage.ins, 26)).to_ulong() == 4 && RF.read(bitset<5>(shift_bits(current_state.ID_stage.ins, 21))).to_ulong() == RF.read(bitset<5>(shift_bits(current_state.ID_stage.ins, 16))).to_ulong())
+                else if (bitset<6>(shift_bits(current_state.ID_stage.ins, 26)).to_ulong() == 4 && RF.read(bitset<5>(shift_bits(current_state.ID_stage.ins, 21))).to_ulong() == RF.read(bitset<5>(shift_bits(current_state.ID_stage.ins, 16))).to_ulong())
                 {
                     //* 執行beq指令，則會停止下一個指令繼續執行，跳去別的指令
                     if (current_state.ID_stage.implement)
@@ -200,15 +306,14 @@ int main()
                     {
                         //* PC = PC + 4
                         next_state.IF_stage.PC = bitset<32>(current_state.IF_stage.PC.to_ulong() + 4);
+                        next_state.ID_stage.ins_name = current_state.IF_stage.ins_name;
                     }
                 }
                 else
                 {
-                    //* PC = PC + 4
-                    next_state.IF_stage.PC = bitset<32>(current_state.IF_stage.PC.to_ulong() + 4);
+                    next_state.ID_stage.ins_name = current_state.IF_stage.ins_name;
                 }
             }
-            next_state.ID_stage.implement = current_state.IF_stage.implement;
         }
         else
         {
@@ -279,6 +384,7 @@ int main()
             next_state.EX_stage.MemWrite = (opcode.to_ulong() == 43) ? 1 : 0;
 
             next_state.EX_stage.implement = current_state.ID_stage.implement;
+            next_state.EX_stage.ins_name = current_state.ID_stage.ins_name;
 
             //* Load-Use Data Hazard
             if (current_state.EX_stage.type && current_state.EX_stage.MemRead) // type=1 -> I-type，MemRead只有lw指令為1
@@ -384,6 +490,7 @@ int main()
             next_state.MEM_stage.MemtoReg = current_state.EX_stage.MemtoReg;
 
             next_state.MEM_stage.implement = current_state.EX_stage.implement;
+            next_state.MEM_stage.ins_name = current_state.EX_stage.ins_name;
         }
         else
         {
@@ -430,6 +537,7 @@ int main()
             next_state.WB_stage.MemtoReg = current_state.MEM_stage.MemtoReg;
 
             next_state.WB_stage.implement = current_state.MEM_stage.implement;
+            next_state.WB_stage.ins_name = current_state.MEM_stage.ins_name;
         }
         else
         {
@@ -454,7 +562,8 @@ int main()
         }
 
         //* 儲存每個cycle結束後的狀態
-        save_state(cycle, next_state);
+        save_state(cycle, current_state);
+        output(cycle, current_state);
 
         //* 進入下一cycle，並更新當前狀態
         cycle = cycle + 1;

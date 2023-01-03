@@ -52,7 +52,7 @@ public:
     //* 輸出memory的state(word為單位)
     void save_file()
     {
-        ofstream file("E:/Computer_Organization/Project/Pipeline/Example1/memory_result.txt", ios_base::out | ios_base::app);
+        ofstream file("E:/Computer_Organization/Project/Pipeline/Example2/memory_result.txt", ios_base::out | ios_base::app);
         int words = mem_size / 4;
         for (int i = 0; i < words; i++)
         {
@@ -61,7 +61,7 @@ public:
             {
                 result.append(data_mem[i * 4 + j].to_string());
             }
-            file << i << ": " << result << endl;
+            file << "W" << i << ": " << result << " " << bitset<32>(result).to_ulong() << endl;
         }
         file.close();
     }
