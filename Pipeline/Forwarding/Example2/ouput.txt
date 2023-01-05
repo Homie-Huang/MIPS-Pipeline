@@ -24,15 +24,15 @@ sw: IF
 
 Cycle 6
 lw: WB 1 1
-add: EX X 1 0 0 1 0 X
+add: EX 1 0 0 0 0 1 0
 sw: ID
 
 Cycle 7
-add: MEM 0 0 1 0 X
+add: MEM 0 0 0 1 0
 sw: EX X 1 0 0 1 0 X
 
 Cycle 8
-add: WB 0 X
+add: WB 1 0
 sw: MEM 0 0 1 0 X
 
 Cycle 9
