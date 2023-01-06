@@ -8,6 +8,7 @@ public:
     ID()
     {
         implement = 0; // implement初始化為0
+        stall = false;
     }
 
     //* instruction
@@ -17,5 +18,8 @@ public:
     bool implement;
 
     //* 儲存當前狀態指令名稱
-    string ins_name; 
+    string ins_name;
+
+    // *儲存ID是否有stall 可提供給IF 使其一起stall
+    bool stall;
 };
