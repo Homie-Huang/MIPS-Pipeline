@@ -163,9 +163,6 @@ int main()
 
     int cycle = 1;
 
-    // 紀錄data hazzard發生在哪一個register
-    int branch_hazzard = 0;
-
     while (true)
     {
         bitset<32> instruction = IM.read(current_state.IF_stage.PC);
@@ -440,14 +437,12 @@ int main()
                 next_state.EX_stage.implement = 0;            // 下次 EX stage 不執行
                 next_state.ID_stage = current_state.ID_stage; // 維持在ID stage
                 next_state.IF_stage = current_state.IF_stage; // 維持在IF stage
-                branch_hazzard = 1;                           // 紀錄R-type beq data hazard 發生在beq的rs
             }
             else if (current_state.ID_stage.ins_name == "beq" && !current_state.EX_stage.type && current_state.EX_stage.Write_reg == bitset<5>(shift_bits(current_state.ID_stage.ins, 16)) && current_state.EX_stage.implement)
             {
                 next_state.EX_stage.implement = 0;            // 下次 EX stage 不執行
                 next_state.ID_stage = current_state.ID_stage; // 維持在ID stage
                 next_state.IF_stage = current_state.IF_stage; // 維持在IF stage
-                branch_hazzard = 2;                           // 紀錄R-type beq data hazard 發生在beq的rt
             }
             // 前前指令(MEM階段))當lw還沒從記憶體讀取data beq指令便無法從rs和rt取得資料
             else if (current_state.ID_stage.ins_name == "beq" && current_state.MEM_stage.ins_name == "lw" && current_state.MEM_stage.rt == bitset<5>(shift_bits(current_state.ID_stage.ins, 21)) && current_state.MEM_stage.implement)
@@ -500,18 +495,15 @@ int main()
             {
                 int beq_rs = RF.read(reg1).to_ulong();
                 int beq_rt = RF.read(reg2).to_ulong();
-                //* 先判斷 beq 須從哪裡拿取資料 (除前指令為R-type外 其他狀況皆可直接拿reg)
-                if (branch_hazzard != 0)
+                if (current_state.MEM_stage.Write_reg == bitset<5>(shift_bits(current_state.ID_stage.ins, 21)))
+                {  
+                    // beq data hazzard 發生在rs
+                    beq_rs = current_state.MEM_stage.ALU_result.to_ulong();
+                }
+                else if (current_state.MEM_stage.Write_reg == bitset<5>(shift_bits(current_state.ID_stage.ins, 16)))
                 {
-                    if (branch_hazzard == 1)
-                    { // beq data hazzard 發生在rs
-                        beq_rs = current_state.MEM_stage.ALU_result.to_ulong();
-                    }
-                    else if (branch_hazzard == 2)
-                    {
-                        beq_rt = current_state.MEM_stage.ALU_result.to_ulong();
-                    }
-                    branch_hazzard = 0;
+                    // beq data hazzard 發生在rt
+                    beq_rt = current_state.MEM_stage.ALU_result.to_ulong();
                 }
 
                 if (beq_rs == beq_rt) //* rs = rt
